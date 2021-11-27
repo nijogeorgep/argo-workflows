@@ -2,9 +2,13 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: build-adservice-
+  generateName: build-and-deploy-service-
 spec:
-  entrypoint: checkout-and-build
+  entrypoint: build-and-deploy-service
+  arguments:
+    parameters:
+      - name: adservice-image
+        value: gcr.io/<project-name>/adservice:3.3.4
   volumes:
     - name: gcr-credentials
       secret:
@@ -13,7 +17,7 @@ spec:
           - key: .dockerconfigjson
             path: config:json
   templates:
-    - name: checkout-and-build
+    - name: build-and-deploy-service
       steps:
         - - name: checkout-build
             template: build-service 
@@ -23,6 +27,10 @@ spec:
                   value: https://github.com/nijogeorgep/microservices-demo.git
                 - name: git-branch
                   value: master
+        - - name: kubectl-deploy
+            template: kubectl-apply
+        - - name: change-image
+            template: kubectl-set-image
     - name: build-service    
       inputs:
         parameters:
@@ -39,8 +47,28 @@ spec:
         args:
           - "--context=/source/code/src/adservice"
           - "--dockerfile=/source/code/src/adservice/Dockerfile"
-          - "--destination=gcr.io/<project-name>/adservice:latest"
+          - "--destination={{workflow.parameters.adservice-image}}"
         volumeMounts:
           name: gcr-credentials
           mountPath: "/kaniko/.docker/"
-            
+    - name: kubectl-apply
+      inputs:
+        artifacts:
+          - name: manifests-source
+            path: manifests
+            git:
+              repo: "https://github.com/nijogeorgep/microservices-demo.git"
+              revision: "master"        
+      container:
+        image: bitnami/kubectl:1.20.13
+        args:
+          - "apply"
+          - "-f"
+          - "/manifests/kubernetes-manifests/adservice.yaml"        
+    - name: kubectl-set-image
+      container: bitnami/kubectl:1.20.13
+      args:
+        - "set"
+        - "image"
+        - "deployment/adservice"
+        - "server={{workflow.parameters.adservice-image}}"
