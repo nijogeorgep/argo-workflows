@@ -1,0 +1,15 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: deploy-adservice-
+spec:
+  entrypoint: deploy-adservice
+  templates:
+    - name: deploy-adservice
+      steps:
+        - - name: kubectl-deploy
+            template: kubectl-apply
+        - - name: change-image
+            template: kubectl-set-image
+  
